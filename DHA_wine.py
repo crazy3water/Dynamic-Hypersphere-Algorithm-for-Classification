@@ -7,13 +7,13 @@ from matplotlib.ticker import FuncFormatter
 import csv
 from sklearn.decomposition import PCA
 
-def g1n_term(var,center,Rm,num):
+def g1n_term(var,center,Rm):
     g1n = tf.linalg.norm(var -center,axis=1 )-Rm
     g1n_max = tf.clip_by_value(g1n,0,1e10)
     penalty = tf.reduce_mean(g1n_max)    # if res>0,penalty = res else penalty = 0
     return penalty
 
-def g2n_term(var,center,Rm,num):
+def g2n_term(var,center,Rm):
     g2n = Rm -  tf.linalg.norm(var -center,axis=1 )
     g2n_max = tf.clip_by_value(g2n, 0, 1e10)
     penalty = tf.reduce_mean(g2n_max)    # if res>0,penalty = res else penalty = 0
@@ -326,8 +326,7 @@ def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate
 
         with tf.name_scope('layer'):
             U = tf.matmul(V, weight) + bias
-
-        U1,U2,U3 = tf.split(U,[Nm1,Nm2,Nm3],0)
+            U1,U2,U3 = tf.split(U,[Nm1,Nm2,Nm3],0)
 
         with tf.name_scope('circle1'):
             Cm1 = tf.reduce_mean(U1,axis=0)
@@ -342,8 +341,8 @@ def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate
         with tf.name_scope('loss'):
             with tf.name_scope('loss_1'):
                 U_ = tf.concat([U2, U3], 0)
-                g1n1 = g1n_term(U1, Cm1, R1, Nm1)
-                g2n1 = g2n_term(U_, Cm1, R1, Nm2+Nm3)
+                g1n1 = g1n_term(U1, Cm1, R1)
+                g2n1 = g2n_term(U_, Cm1, R1)
                 Rn1 = tf.where(tf.greater(-R1, 0), -R1, 0)
 
                 # loss = 该类中所有样本的欧式距离 + P*{ 本类样本 + 非本类样本 }
@@ -353,23 +352,21 @@ def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate
             with tf.name_scope('loss_2'):
 
                 U_ = tf.concat([U1, U3], 0)
-                g1n2 = g1n_term(U2, Cm2, R2, Nm2)
-                g2n2 = g2n_term(U_, Cm2, R2, Nm1 + Nm3)
+                g1n2 = g1n_term(U2, Cm2, R2)
+                g2n2 = g2n_term(U_, Cm2, R2)
                 Rn2 = tf.where(tf.greater(-R2, 0), -R2, 0)
 
                 # loss = 该类中所有样本的欧式距离 + P*{ 本类样本 + 非本类样本 }
-
                 loss2_pow =  tf.pow(g1n2,2) + tf.pow(g2n2,2)+ tf.pow(Rn2,2)
 
             with tf.name_scope('loss_3'):
                 U_ = tf.concat([U1, U2], 0)
-                g1n3= g1n_term(U3, Cm3, R3, Nm3)
-                g2n3 = g2n_term(U_, Cm3, R3, Nm1 + Nm2)
+                g1n3= g1n_term(U3, Cm3, R3)
+                g2n3 = g2n_term(U_, Cm3, R3)
                 Rn3 = tf.where(tf.greater(-R3, 0), -R3, 0)
 
                 # loss = 该类中所有样本的欧式距离 + P*{ 本类样本 + 非本类样本 }
                 loss3_pow =tf.pow( g1n3,2)+ tf.pow(g2n3,2)+ tf.pow(Rn3,2)
-
 
             with tf.name_scope('lossR2Cm_R12'):
                 Cm12_normal =(1+0)* (R1+R2)- tf.linalg.norm( Cm1-Cm2 )
@@ -414,7 +411,7 @@ def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate
                 _ = sess.run(train_op, feed_dict={V: datatrain })
                 loss = sess.run(loss_all, feed_dict={V: datatrain })
                 loss_list.append(loss)
-                R_1,R_2,R_3 = sess.run((R1,R2,R3))
+                R_1,R_2,R_3 = sess.run([R1,R2,R3])
                 R1_list.append(R_1)
                 R2_list.append(R_2)
                 R3_list.append(R_3)
