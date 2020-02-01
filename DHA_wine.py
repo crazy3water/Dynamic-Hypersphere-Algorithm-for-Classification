@@ -1,24 +1,10 @@
 import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler,RobustScaler
-from sklearn.datasets import load_iris
-from tensorflow.contrib.layers import l2_regularizer,l1_regularizer
 import numpy as np
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import SVC
-from sklearn import tree
-from sklearn.ensemble import AdaBoostClassifier,RandomForestClassifier
-from sklearn.naive_bayes import GaussianNB
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import precision_score
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from xgboost import XGBClassifier
 from matplotlib.ticker import FuncFormatter
 import csv
-import shutil
-import os
-from mpl_toolkits.mplot3d import Axes3D
-from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 
 def g1n_term(var,center,Rm,num):
@@ -40,7 +26,7 @@ def g2n_term(var,center,Rm,num):
 def load_Wine():
     data = []
     target = []
-    dataFrame = csv.reader(open('D:/ProjectPyTest/testFile/Wine.csv'))
+    dataFrame = csv.reader(open('./Wine.csv'))
     for row in dataFrame:
         data.append(row[1:])
         target.append(row[0])
@@ -348,22 +334,23 @@ def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate
         with tf.name_scope('layer'):
             U =   tf.matmul(V, weight) + bias
 
+        U1,U2,U3 = tf.split(U,[Nm1,Nm2,Nm3],0)
 
         with tf.name_scope('circle1'):
-            Cm1 = tf.reduce_sum(U[:Nm1, :],axis=0)/Nm1
+            Cm1 = tf.reduce_sum(U1,axis=0)/Nm1
 
         with tf.name_scope('circle2'):
-            Cm2 = tf.reduce_sum(U[Nm1:(Nm1+Nm2), :],axis=0)/Nm2
+            Cm2 = tf.reduce_sum(U2,axis=0)/Nm2
 
         with tf.name_scope('circle3'):
-            Cm3 = tf.reduce_sum(U[(Nm1+Nm2):, :],axis=0)/Nm3
+            Cm3 = tf.reduce_sum(U3,axis=0)/Nm3
 
 
         with tf.name_scope('loss'):
             with tf.name_scope('loss_1'):
-
-                g1n1 = g1n_term(U[:Nm1, :], Cm1, R1, Nm1)
-                g2n1 = g2n_term(U[Nm1:, :], Cm1, R1, Nm2+Nm3)
+                U_ = tf.concat([U2, U3], 0)
+                g1n1 = g1n_term(U1, Cm1, R1, Nm1)
+                g2n1 = g2n_term(U_, Cm1, R1, Nm2+Nm3)
                 Rn1 = tf.where(tf.greater(-R1, 0), -R1, 0)
 
                 # loss = 该类中所有样本的欧式距离 + P*{ 本类样本 + 非本类样本 }
@@ -372,8 +359,8 @@ def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate
 
             with tf.name_scope('loss_2'):
 
-                U_ = tf.concat([U[:Nm1, :], U[(Nm1 + Nm2):, :]], 0)
-                g1n2 = g1n_term(U[Nm1:Nm1 + Nm2, :], Cm2, R2, Nm2)
+                U_ = tf.concat([U1, U3], 0)
+                g1n2 = g1n_term(U2, Cm2, R2, Nm2)
                 g2n2 = g2n_term(U_, Cm2, R2, Nm1 + Nm3)
                 Rn2 = tf.where(tf.greater(-R2, 0), -R2, 0)
 
@@ -382,9 +369,9 @@ def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate
                 loss2_pow =  tf.pow(g1n2,2) + tf.pow(g2n2,2)+ tf.pow(Rn2,2)
 
             with tf.name_scope('loss_3'):
-
-                g1n3= g1n_term(U[(Nm1 + Nm2):, :], Cm3, R3, Nm3)
-                g2n3 = g2n_term(U[:(Nm1 + Nm2), :], Cm3, R3, Nm1 + Nm2)
+                U_ = tf.concat([U1, U2], 0)
+                g1n3= g1n_term(U3, Cm3, R3, Nm3)
+                g2n3 = g2n_term(U_, Cm3, R3, Nm1 + Nm2)
                 Rn3 = tf.where(tf.greater(-R3, 0), -R3, 0)
 
                 # loss = 该类中所有样本的欧式距离 + P*{ 本类样本 + 非本类样本 }
@@ -536,7 +523,6 @@ def Acc_3(Cmpre_one,Cmpre_two,Cmpre_three,target):
                                 y[i] = 1
         correct_predict = np.equal(y, target)
         accuracy = np.mean(correct_predict)
-
     return accuracy
 
 if __name__ == '__main__':
