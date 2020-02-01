@@ -516,6 +516,8 @@ def Acc_3(Cmpre_one,Cmpre_two,Cmpre_three,target):
     return accuracy
 
 if __name__ == '__main__':
+    import time
+    t1 = time.time()
     R_constant = 1.0
 
     op_rate = 0.8
@@ -565,6 +567,8 @@ if __name__ == '__main__':
         # P_class = 0.00001
         print(per,P_class)
         acc = New_NDC_3kind(datatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate,P,P_R2Cm)
+        t2 = time.time()
+        print('%.2f s'%(t2-t1))
         acc_list.append(acc)
         index_i +=1
     print(acc_list)
