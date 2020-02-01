@@ -8,19 +8,15 @@ import csv
 from sklearn.decomposition import PCA
 
 def g1n_term(var,center,Rm,num):
-    penalty = 0.0
-    for i in range(num):
-        g1n = tf.linalg.norm(var[i,:] -center )-Rm
-        g1n_max = tf.where(tf.greater(g1n, 0), g1n, 0)
-        penalty = penalty + g1n_max   # if res>0,penalty = res else penalty = 0
+    g1n = tf.linalg.norm(var -center,axis=1 )-Rm
+    g1n_max = tf.clip_by_value(g1n,0,1e10)
+    penalty = tf.reduce_mean(g1n_max)    # if res>0,penalty = res else penalty = 0
     return penalty
 
 def g2n_term(var,center,Rm,num):
-    penalty = 0.0
-    for i in range(num):
-        g2n = Rm -  tf.linalg.norm(var[i,:] -center )
-        g2n_max = tf.where(tf.greater(g2n, 0), g2n, 0)
-        penalty = penalty + g2n_max   # if res>0,penalty = res else penalty = 0
+    g2n = Rm -  tf.linalg.norm(var -center,axis=1 )
+    g2n_max = tf.clip_by_value(g2n, 0, 1e10)
+    penalty = tf.reduce_mean(g2n_max)    # if res>0,penalty = res else penalty = 0
     return penalty
 
 def load_Wine():
@@ -322,28 +318,25 @@ def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate
             with tf.name_scope('bias'):
                 bias = tf.Variable(tf.zeros([x_new]), name='B', trainable=True)
                 best_b = tf.Variable(tf.zeros([x_new]), name='B', trainable=False)
-            with tf.name_scope('Cm'):
-                Cm1 = tf.Variable(tf.zeros([1, x_new]), name='Cm1', trainable=False)  # 第一类质心
-                Cm2 = tf.Variable(tf.zeros([1, x_new]), name='Cm2', trainable=False)  # 第二类质心
-                Cm3 = tf.Variable(tf.zeros([1, x_new]), name='Cm3', trainable=False)  # 第三类质心
+
             with tf.name_scope('R'):
                 R1 = tf.Variable(initial_value=R_constant, dtype=tf.float32, name='R1', trainable=True)  # 半径
                 R2 = tf.Variable(initial_value=R_constant, dtype=tf.float32, name='R2', trainable=True)  # 半径
                 R3 = tf.Variable(initial_value=R_constant, dtype=tf.float32, name='R3', trainable=True)  # 半径
 
         with tf.name_scope('layer'):
-            U =   tf.matmul(V, weight) + bias
+            U = tf.matmul(V, weight) + bias
 
         U1,U2,U3 = tf.split(U,[Nm1,Nm2,Nm3],0)
 
         with tf.name_scope('circle1'):
-            Cm1 = tf.reduce_sum(U1,axis=0)/Nm1
+            Cm1 = tf.reduce_mean(U1,axis=0)
 
         with tf.name_scope('circle2'):
-            Cm2 = tf.reduce_sum(U2,axis=0)/Nm2
+            Cm2 = tf.reduce_mean(U2,axis=0)
 
         with tf.name_scope('circle3'):
-            Cm3 = tf.reduce_sum(U3,axis=0)/Nm3
+            Cm3 = tf.reduce_mean(U3,axis=0)
 
 
         with tf.name_scope('loss'):
