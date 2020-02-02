@@ -206,16 +206,21 @@ class DHA():
                     # gaus_Cmpre_one = Gaussian_PDF(weight_, bias_, datatrain[:Nm1, :], datatest)
                     Cmpre_test.append(Cmpre)
                 acc = self.Acc(Cmpre_test, self.y_test)
-                self.plot_R()
                 print(acc)
-                plt.show()
+
 
 if __name__ == "__main__":
+    import time
     DataPath = r'.\Wine.csv'
     DataSet = pd.read_csv(DataPath,header=None)
 
     DHA_classifier = DHA(DataSet,train_step=300)
+    t1 = time.time()
     DHA_classifier.gen_model()
+    t2 = time.time()
+    print('图生成及训练时间：%.2f s',(t2 - t1))
+    DHA_classifier.plot_R()
+    plt.show()
 
 
 
