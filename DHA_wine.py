@@ -550,8 +550,8 @@ if __name__ == '__main__':
         datatrain = datatrain[sort_index]
         target_train = target_train[sort_index]
 
-        datatest = RBF_testdata(datatrain, datatest)
-        datatrain = RBF_traindata(datatrain)
+        # datatest = RBF_testdata(datatrain, datatest)
+        # datatrain = RBF_traindata(datatrain)
 
         print('RBF转换完成')
         _, x = np.shape(datatrain)

@@ -33,6 +33,7 @@ class DHA():
         print('-----------------------预处理完成----------------------')
     #数据预处理
     def preprocess(self,per):
+
         self.unique =  self.DataFram.loc[:,0].unique()
         target = self.DataFram.loc[:,0].values
         data = self.DataFram.loc[:,1:].apply(lambda x: (x - np.min(x)) / (np.max(x) - np.min(x))).values
@@ -101,6 +102,7 @@ class DHA():
         data_now = np.matmul(self.x_train, self.weight_) + self.bias_
         pca = PCA(n_components=2)
         pca_data_aff = pca.fit_transform(data_now)
+        pca = PCA(n_components=2)
         pca_circle = pca.fit_transform(self.circle)
 
         theta = np.arange(0, 2 * np.pi, 0.01)
@@ -108,10 +110,10 @@ class DHA():
         s = 0
         try:
             for index,i in enumerate(self.split_num):
-                plt.scatter(pca_data_aff[s:s + i,0],pca_data_aff[s:s + i,1],c=self.color[index])
+                plt.scatter(pca_data_aff[s:s + i,0],pca_data_aff[s:s + i,1])
                 x = pca_circle[index][0] + self.R_list[index] * np.cos(theta)
                 y = pca_circle[index][1] + self.R_list[index] * np.sin(theta)
-                plt.plot(x, y,c=self.color[index])
+                plt.plot(x, y,c='b')
                 s = s + i
         except:
             print('可能颜色不够用了!')
@@ -259,7 +261,7 @@ if __name__ == "__main__":
     DataPath = r'.\Wine.csv'
     DataSet = pd.read_csv(DataPath,header=None)
 
-    DHA_classifier = DHA(DataSet,train_step=300)
+    DHA_classifier = DHA(DataSet,train_step=1000)
     t1 = time.time()
     DHA_classifier.gen_model()
     t2 = time.time()
