@@ -6,7 +6,6 @@ from sklearn.model_selection import train_test_split
 from matplotlib.ticker import FuncFormatter
 import csv
 from sklearn.decomposition import PCA
-import time
 
 def g1n_term(var,center,Rm):
     g1n = tf.linalg.norm(var -center,axis=1 )-Rm
@@ -297,10 +296,14 @@ def plotSpace3(w,b,data,circle,r,Nm1,Nm2,Nm3):
     plt.show()
 
 def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate,P,P_R2Cm):
-    names = locals()
+    best_acc = 0
+    num_i = 0
+    y_ = []
     circle = []
     r = []
-
+    y_test = []
+    y_score = []
+    y_gaus = []
     with tf.name_scope('Space'):
         with tf.name_scope('InitVariable'):
             with tf.name_scope('V'):
@@ -310,69 +313,81 @@ def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate
                 learning_rate = tf.Variable(op_rate, name='TrainStep', trainable=False)
             with tf.name_scope('weight'):
                 weight = tf.Variable(tf.random_normal([x_new, x_new]), name='W', trainable=True)
+                best_w = tf.Variable(tf.random_normal([x_new, x_new]), name='W', trainable=False)
 
             with tf.name_scope('bias'):
                 bias = tf.Variable(tf.zeros([x_new]), name='B', trainable=True)
+                best_b = tf.Variable(tf.zeros([x_new]), name='B', trainable=False)
 
             with tf.name_scope('R'):
-                for i in range(1,len([Nm1,Nm2,Nm3])+1):
-                    names['R{}'.format(i)] = tf.Variable(initial_value=1.0, dtype=tf.float32,
-                                                         name='R{}'.format(i), trainable=True)
+                R1 = tf.Variable(initial_value=R_constant, dtype=tf.float32, name='R1', trainable=True)  # 半径
+                R2 = tf.Variable(initial_value=R_constant, dtype=tf.float32, name='R2', trainable=True)  # 半径
+                R3 = tf.Variable(initial_value=R_constant, dtype=tf.float32, name='R3', trainable=True)  # 半径
 
-        split_num = [Nm1,Nm2,Nm3]
         with tf.name_scope('layer'):
             U = tf.matmul(V, weight) + bias
-            for i in range(1,len(split_num)+1):
-                names['U{}'.format(i)] = i
-            # U1,U2,U3 = tf.split(U, self.split_num, 0)
-            for index, i in enumerate(tf.split(U, split_num, 0)):
-                names['U{}'.format(index+1)] = i
+            U1,U2,U3 = tf.split(U,[Nm1,Nm2,Nm3],0)
 
-            with tf.name_scope('circle'):
-                for i in range(1,len(split_num)+1):
-                    names['Cm{}'.format(i)] = tf.reduce_mean(names['U{}'.format(i)],axis=0)
+        with tf.name_scope('circle1'):
+            Cm1 = tf.reduce_mean(U1,axis=0)
+
+        with tf.name_scope('circle2'):
+            Cm2 = tf.reduce_mean(U2,axis=0)
+
+        with tf.name_scope('circle3'):
+            Cm3 = tf.reduce_mean(U3,axis=0)
+
 
         with tf.name_scope('loss'):
-            split_list = np.arange(1, len(split_num)+1)
-            for i in range(1,len(split_num)+1):
-                with tf.name_scope('loss_pow{}'.format(i)):
-                    split_list_ = np.delete(split_list, i-1)
-                    if len(split_list_) == 1:
-                        U_ = names['U{}'.format(split_list_[0])]
-                    else:
-                        U_ = tf.concat([names['U{}'.format(j)] for j in split_list_], 0)
+            with tf.name_scope('loss_1'):
+                U_ = tf.concat([U2, U3], 0)
+                g1n1 = g1n_term(U1, Cm1, R1)
+                g2n1 = g2n_term(U_, Cm1, R1)
+                Rn1 = tf.where(tf.greater(-R1, 0), -R1, 0)
 
-                    g1n1 = g1n_term(names['U{}'.format(i)],
-                                         names['Cm{}'.format(i)],
-                                         names['R{}'.format(i)])
-                    g2n1 = g2n_term(U_,
-                                         names['Cm{}'.format(i)],
-                                         names['R{}'.format(i)])
-                    Rn = tf.where(tf.greater(0.0, names['R{}'.format(i)]),
-                                  names['R{}'.format(i)],
-                                  0)
+                # loss = 该类中所有样本的欧式距离 + P*{ 本类样本 + 非本类样本 }
 
-                    # loss = 该类中所有样本的欧式距离 + P*{ 本类样本 + 非本类样本 }
+                loss1_pow =   tf.pow(g1n1,2) + tf.pow(g2n1,2)+tf.pow(Rn1,2)
 
-                    names['loss{}_pow'.format(i)] = tf.pow(g1n1, 2) + tf.pow(g2n1, 2) + tf.pow(Rn, 2)
-            import itertools
-            with tf.name_scope('lossR2Cm'):
-                combine = list(itertools.combinations(np.arange(1, len(split_num)+1).tolist(), 2))
-                loss_R2Cm = 0
-                for i in combine:
-                    with tf.name_scope('lossR2Cm{}{}'.format(i[0],i[1])):
-                        Cm_normal = (names['R{}'.format(i[0])] + names['R{}'.format(i[1])]) \
-                                    - tf.linalg.norm(names['Cm{}'.format(i[0])] - names['Cm{}'.format(i[1])])
-                        loss_R2Cm = loss_R2Cm + tf.where(tf.greater(Cm_normal, 0), Cm_normal, 0)
+            with tf.name_scope('loss_2'):
 
-        loss_pow = 0
-        for i in range(1,len(split_num)+1):
-            loss_pow = loss_pow + names['loss{}_pow'.format(i)]
+                U_ = tf.concat([U1, U3], 0)
+                g1n2 = g1n_term(U2, Cm2, R2)
+                g2n2 = g2n_term(U_, Cm2, R2)
+                Rn2 = tf.where(tf.greater(-R2, 0), -R2, 0)
 
-        with tf.name_scope('loss_class'):
-            loss_class = 0
-            for i in range(1,len(split_num)+1):
-                loss_class = loss_class + tf.linalg.norm(names['U{}'.format(i)] - names['Cm{}'.format(i)])
+                # loss = 该类中所有样本的欧式距离 + P*{ 本类样本 + 非本类样本 }
+                loss2_pow =  tf.pow(g1n2,2) + tf.pow(g2n2,2)+ tf.pow(Rn2,2)
+
+            with tf.name_scope('loss_3'):
+                U_ = tf.concat([U1, U2], 0)
+                g1n3= g1n_term(U3, Cm3, R3)
+                g2n3 = g2n_term(U_, Cm3, R3)
+                Rn3 = tf.where(tf.greater(-R3, 0), -R3, 0)
+
+                # loss = 该类中所有样本的欧式距离 + P*{ 本类样本 + 非本类样本 }
+                loss3_pow =tf.pow( g1n3,2)+ tf.pow(g2n3,2)+ tf.pow(Rn3,2)
+
+            with tf.name_scope('lossR2Cm_R12'):
+                Cm12_normal =(1+0)* (R1+R2)- tf.linalg.norm( Cm1-Cm2 )
+                Cm12_penalty = tf.where( tf.greater(Cm12_normal,0),Cm12_normal,0)
+
+            with tf.name_scope('lossR2Cm_R13'):
+                Cm13_normal = (1+0)* (R1 + R3) -  tf.linalg.norm(Cm1 - Cm3)
+                Cm13_penalty = tf.where(tf.greater(Cm13_normal, 0), Cm13_normal, 0)
+
+            with tf.name_scope('lossR2Cm_R23'):
+                Cm23_normal =(1+0)* (R2 + R3) -tf.linalg.norm(Cm2 - Cm3)
+                Cm23_penalty = tf.where(tf.greater(Cm23_normal, 0), Cm23_normal, 0)
+
+        with tf.name_scope('loss_pow'):
+            loss_pow = (loss1_pow+loss2_pow+loss3_pow)
+
+        with tf.name_scope('loss_R2Cm'):
+            loss_R2Cm =  (Cm12_penalty+Cm13_penalty+Cm23_penalty)
+
+            loss_class = tf.linalg.norm(U[:Nm1, :] - Cm1) + tf.linalg.norm(U[Nm1:Nm1 + Nm2, :] - Cm2)+\
+                         tf.linalg.norm(U[(Nm1 + Nm2):,:] - Cm2)
 
         with tf.name_scope('loss_all'):
             loss_all =   P *(loss_pow) + P_R2Cm *loss_R2Cm+P_class* loss_class
@@ -392,20 +407,14 @@ def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate
             R3_list = []
             print('Enter train the Space........')
 
-            t1 = time.time()
             for j in range(step):
-                # print(sess.run(loss1_pow, feed_dict={V: datatrain}))
-                # print(sess.run([Cm1,R1], feed_dict={V: datatrain}))
                 _ = sess.run(train_op, feed_dict={V: datatrain })
-                # print(sess.run(loss_pow, feed_dict={V: datatrain }))
                 loss = sess.run(loss_all, feed_dict={V: datatrain })
                 loss_list.append(loss)
-                R_1,R_2,R_3 = sess.run([names['R1'],names['R2'],names['R3']])
+                R_1,R_2,R_3 = sess.run([R1,R2,R3])
                 R1_list.append(R_1)
                 R2_list.append(R_2)
                 R3_list.append(R_3)
-            t2 = time.time()
-            print('训练%d步的时间%.2f s' % (step, t2 - t1))
             print(loss_list)
             with open('loss_wine_.txt','w') as f:
                 for l in loss_list:
@@ -413,22 +422,22 @@ def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate
             f.close()
             weight_ = sess.run(weight)
             bias_ = sess.run(bias)
-            Circle1 = sess.run(names['Cm1'], feed_dict={V: datatrain})
-            R_1 = sess.run(names['R1'])
+            Circle1 = sess.run(Cm1, feed_dict={V: datatrain})
+            R_1 = sess.run(R1)
             Cmpre_one = Cm_test_distance(datatest,Circle1,weight_,bias_,R_1)
             gaus_Cmpre_one = Gaussian_PDF(weight_, bias_, datatrain[:Nm1, :], datatest)
             circle.append(Circle1)
             r.append(R_1)
 
-            Circle2 = sess.run(names['Cm2'], feed_dict={V: datatrain})
-            R_2 = sess.run(names['R2'])
+            Circle2 = sess.run(Cm2, feed_dict={V: datatrain})
+            R_2 = sess.run(R2)
             Cmpre_two = Cm_test_distance(datatest,Circle2,weight_,bias_,R_2)
             gaus_Cmpre_two = Gaussian_PDF(weight_, bias_, datatrain[Nm1:(Nm1 + Nm2), :], datatest)
             circle.append(Circle2)
             r.append(R_2)
 
-            Circle3 = sess.run(names['Cm3'], feed_dict={V: datatrain})
-            R_3 = sess.run(names['R3'])
+            Circle3 = sess.run(Cm3, feed_dict={V: datatrain})
+            R_3 = sess.run(R3)
             Cmpre_three = Cm_test_distance(datatest,Circle3,weight_,bias_,R_3)
             gaus_Cmpre_three = Gaussian_PDF(weight_, bias_, datatrain[(Nm1 + Nm2):, :], datatest)
             circle.append(Circle3)
@@ -436,8 +445,6 @@ def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate
 
             Acc = Acc_3(Cmpre_one, Cmpre_two, Cmpre_three, target_test)
             gaus_acc = Gaussian_acc3(gaus_Cmpre_one, gaus_Cmpre_two, gaus_Cmpre_three,target_test )
-            print('acc:',Acc)
-            print('gua:',gaus_acc)
             if Acc< gaus_acc:
                 Acc=gaus_acc
             print(random_index)
@@ -446,10 +453,10 @@ def New_NDC_3kind(atatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate
             plt.figure(3)
             ax2 = plt.subplot(111)
             ax2.set_xlabel('Iteration number',fontsize=13)
-            ax2.set_ylabel('Loss',fontsize=13)
+            ax2.set_ylabel('Loss/10^4',fontsize=13)
             ax2.grid(False)
             def formatnum(x,pos):
-                return '%.1f'%(x)
+                return '%.1f'%(x/10000)
             formatter = FuncFormatter(formatnum)
             ax2.yaxis.set_major_formatter(formatter)
             x = np.arange(0,step)
@@ -509,7 +516,8 @@ def Acc_3(Cmpre_one,Cmpre_two,Cmpre_three,target):
     return accuracy
 
 if __name__ == '__main__':
-
+    import time
+    t1 = time.time()
     R_constant = 1.0
 
     op_rate = 0.8
@@ -519,7 +527,7 @@ if __name__ == '__main__':
     x = 13        #初始维度
     x_new = 13  #新的维度
 
-    per = 0.1
+    per = 0.3
 
     # Nm1 = 50  #第一类的数量
     # Nm2 = 50  #第二类的数量
@@ -541,11 +549,11 @@ if __name__ == '__main__':
         sort_index = np.argsort(target_train)
         datatrain = datatrain[sort_index]
         target_train = target_train[sort_index]
-        # datatest = RBF_testdata(datatrain, datatest)
-        # datatrain = RBF_traindata(datatrain)
 
+        datatest = RBF_testdata(datatrain, datatest)
+        datatrain = RBF_traindata(datatrain)
 
-        # print('RBF转换完成')
+        print('RBF转换完成')
         _, x = np.shape(datatrain)
         x_new = int(x)  # 新的维度
 
@@ -559,7 +567,8 @@ if __name__ == '__main__':
         # P_class = 0.00001
         print(per,P_class)
         acc = New_NDC_3kind(datatrain,target_train,datatest,target_test,Nm1,Nm2,Nm3,op_rate,P,P_R2Cm)
-
+        t2 = time.time()
+        print('%.2f s'%(t2-t1))
         acc_list.append(acc)
         index_i +=1
     print(acc_list)
