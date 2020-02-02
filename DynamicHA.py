@@ -4,6 +4,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 import itertools
 import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
 
 class DHA():
     def __init__(self,DataFram,train_step=1000,x_newW=None,test_per=0.1,R_constant = 1.0,lr=0.8,P=1.0,P_R2Cm=1.0,P_class=0.0001):
@@ -26,6 +27,7 @@ class DHA():
         self.P_R2Cm = P_R2Cm
         self.P_class = P_class
         self.R_constant = R_constant
+        self.color = ['r','g','b','k','y','m']
         print('-----------------------数据预处理----------------------')
         self.preprocess(test_per)
         print('-----------------------预处理完成----------------------')
@@ -51,6 +53,8 @@ class DHA():
         self.split_num = []
         for class_i in self.unique:
             self.split_num.append(len(self.y_train[self.y_train==class_i]))
+
+    # -------------------距离计算区----------------
     #测试数据集 在空间W中到球心的距离
     def Cm_test_distance(self,testdata,Cm,w,b,R):
         space_test = np.matmul(testdata,w) + b
@@ -68,11 +72,51 @@ class DHA():
         accuracy = np.mean(correct_predict)
         return accuracy
 
+    #-------------------画图区----------------
+    #画 R 训练过程中的变化曲线图
     def plot_R(self):
         R_history = np.array(self.R_history)
         plt.figure()
         for i in range(len(self.split_num)):
             plt.plot(R_history[:,i])
+
+    #画 loss 训练过程中的变化曲线图
+    def plot_loss(self):
+        loss_history = np.array(self.loss_list)
+        plt.figure()
+        plt.plot(loss_history)
+
+    #采用PCA画训练前的点
+    def plot_pre_point_2D(self):
+        pca = PCA(n_components=2)
+        pca_dataPre = pca.fit_transform(self.x_train)
+        plt.figure()
+        s = 0
+        for i in self.split_num:
+            plt.scatter(pca_dataPre[s:s + i,0],pca_dataPre[s:s + i,1])
+            s = s + i
+
+    # 采用PCA画训练后的点
+    def plot_aff_point_2D(self):
+        data_now = np.matmul(self.x_train, self.weight_) + self.bias_
+        pca = PCA(n_components=2)
+        pca_data_aff = pca.fit_transform(data_now)
+        pca_circle = pca.fit_transform(self.circle)
+
+        theta = np.arange(0, 2 * np.pi, 0.01)
+        plt.figure()
+        s = 0
+        try:
+            for index,i in enumerate(self.split_num):
+                plt.scatter(pca_data_aff[s:s + i,0],pca_data_aff[s:s + i,1],c=self.color[index])
+                x = pca_circle[index][0] + self.R_list[index] * np.cos(theta)
+                y = pca_circle[index][1] + self.R_list[index] * np.sin(theta)
+                plt.plot(x, y,c=self.color[index])
+                s = s + i
+        except:
+            print('可能颜色不够用了!')
+        pass
+    #------------------模型区------------------
     #在圆心外惩罚
     def g1n_term(self, var, center, Rm):
         g1n = tf.linalg.norm(var - center, axis=1) - Rm
@@ -178,7 +222,7 @@ class DHA():
                 self.R_history = []
 
                 print('Enter train the Space........')
-
+                t1_ = time.time()
                 for j in range(self.train_step):
 
                     _ = sess.run(train_op, feed_dict={V: self.x_train})
@@ -188,21 +232,22 @@ class DHA():
                     num = len(self.split_num)
                     R = sess.run([names['R{}'.format(i)] for i in range(num)])
                     self.R_history.append(R)
-
+                t2_ = time.time()
+                print('训练时间：%.2f s'% (t2_ -t1_))
                 print(self.loss_list)
                 with open('loss_wine_.txt', 'w') as f:
                     for l in self.loss_list:
                         f.write(str(l) + ',')
                 f.close()
-                weight_ = sess.run(weight)
-                bias_ = sess.run(bias)
-                circle,R_list,Cmpre_test = [],[],[]
+                self.weight_ = sess.run(weight)
+                self.bias_ = sess.run(bias)
+                self.circle,self.R_list,Cmpre_test = [],[],[]
                 for i in range(len(self.split_num)):
                     circle_ = sess.run(names['Cm{}'.format(i)], feed_dict={V: self.x_train})
                     R_ = sess.run(names['R{}'.format(i)])
-                    circle.append(circle_)
-                    R_list.append(R_)
-                    Cmpre = self.Cm_test_distance(self.x_test, circle_, weight_, bias_, R_)
+                    self.circle.append(circle_)
+                    self.R_list.append(R_)
+                    Cmpre = self.Cm_test_distance(self.x_test, circle_, self.weight_, self.bias_, R_)
                     # gaus_Cmpre_one = Gaussian_PDF(weight_, bias_, datatrain[:Nm1, :], datatest)
                     Cmpre_test.append(Cmpre)
                 acc = self.Acc(Cmpre_test, self.y_test)
@@ -218,8 +263,11 @@ if __name__ == "__main__":
     t1 = time.time()
     DHA_classifier.gen_model()
     t2 = time.time()
-    print('图生成及训练时间：%.2f s',(t2 - t1))
+    print('图生成及训练时间：%.2f s'%(t2 - t1))
     DHA_classifier.plot_R()
+    DHA_classifier.plot_loss()
+    DHA_classifier.plot_pre_point_2D()
+    DHA_classifier.plot_aff_point_2D()
     plt.show()
 
 

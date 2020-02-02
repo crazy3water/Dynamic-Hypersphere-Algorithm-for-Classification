@@ -524,7 +524,7 @@ if __name__ == '__main__':
     # Nm1 = 50  #第一类的数量
     # Nm2 = 50  #第二类的数量
     # Nm3 = 50  #第三类的数量
-    step = 1000
+    step = 300
 
     data, target = load_Wine()
 
