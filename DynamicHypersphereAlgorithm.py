@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 
 class DHA():
-    def __init__(self,DataFram,train_step=1000,x_newW=None,test_per=0.1,R_constant = 1.0,lr=0.8,P=1.0,P_R2Cm=1.0,P_class=0.0001):
+    def __init__(self,Data,Label,train_step=1000,x_newW=None,test_per=0.1,R_constant = 1.0,lr=0.8,P=1.0,P_R2Cm=1.0,P_class=0.0001):
         """
         :param DataFram:  数据集
         :param train_step:训练步数
@@ -19,7 +19,8 @@ class DHA():
         :param P_R2Cm:    球体之间的惩罚系数
         :param P_class:   加速收敛系数
         """
-        self.DataFram = DataFram
+        self.Data = Data
+        self.Label = Label
         self.train_step = train_step
         self.x_newW = x_newW
         self.lr = lr
@@ -34,9 +35,9 @@ class DHA():
     #数据预处理
     def preprocess(self,per):
 
-        self.unique =  self.DataFram.loc[:,0].unique()
-        target = self.DataFram.loc[:,0].values
-        data = self.DataFram.loc[:,1:].apply(lambda x: (x - np.min(x)) / (np.max(x) - np.min(x))).values
+        self.unique =  self.Label.unique()
+        target = self.Label.values
+        data = self.Data.apply(lambda x: (x - np.min(x)) / (np.max(x) - np.min(x))).values
 
         if self.x_newW == None:
             n, self.x_w = data.shape
@@ -210,8 +211,8 @@ class DHA():
                 loss_all = self.P * (loss_pow) + self.P_R2Cm * loss_R2Cm + self.P_class * loss_class
 
             with tf.name_scope('Optimizer'):
-                learning_rate = tf.train.exponential_decay(learning_rate, training_step, decay_steps=100,
-                                                           decay_rate=0.8)
+                # learning_rate = tf.train.exponential_decay(learning_rate, training_step, decay_steps=100,
+                #                                            decay_rate=0.8, staircase=True)
                 train_op = tf.train.AdamOptimizer(learning_rate).minimize(loss_all)
 
             init_op = tf.global_variables_initializer()
@@ -258,10 +259,18 @@ class DHA():
 
 if __name__ == "__main__":
     import time
-    DataPath = r'.\Wine.csv'
+    DataPath = r'Wine.csv'
     DataSet = pd.read_csv(DataPath,header=None)
+    Label = DataSet.loc[:, 0]
+    DataSet = DataSet.loc[:,1:]
 
-    DHA_classifier = DHA(DataSet,train_step=1000)
+    DHA_classifier = DHA(DataSet,Label,
+                         train_step=5000,
+                         lr=0.001,
+                         R_constant=1.0,
+                         P=1.0,
+                         P_R2Cm=0.5,
+                         P_class=0.0001)
     t1 = time.time()
     DHA_classifier.gen_model()
     t2 = time.time()
