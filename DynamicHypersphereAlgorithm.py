@@ -5,9 +5,10 @@ from sklearn.model_selection import train_test_split
 import itertools
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
+import random
 
 class DHA():
-    def __init__(self,Data,Label,train_step=1000,x_newW=None,test_per=0.1,R_constant = 1.0,lr=0.8,P=1.0,P_R2Cm=1.0,P_class=0.0001):
+    def __init__(self,DataFram,train_step=1000,x_newW=None,test_per=0.1,R_constant = 1.0,lr=0.8,P=1.0,P_R2Cm=1.0,P_class=0.0001,batch_size=10):
         """
         :param DataFram:  数据集
         :param train_step:训练步数
@@ -19,8 +20,7 @@ class DHA():
         :param P_R2Cm:    球体之间的惩罚系数
         :param P_class:   加速收敛系数
         """
-        self.Data = Data
-        self.Label = Label
+        self.DataFram = DataFram
         self.train_step = train_step
         self.x_newW = x_newW
         self.lr = lr
@@ -28,16 +28,17 @@ class DHA():
         self.P_R2Cm = P_R2Cm
         self.P_class = P_class
         self.R_constant = R_constant
+        self.batch_size = batch_size
         self.color = ['r','g','b','k','y','m']
         print('-----------------------数据预处理----------------------')
         self.preprocess(test_per)
         print('-----------------------预处理完成----------------------')
     #数据预处理
     def preprocess(self,per):
-
-        self.unique =  self.Label.unique()
-        target = self.Label.values
-        data = self.Data.apply(lambda x: (x - np.min(x)) / (np.max(x) - np.min(x))).values
+        self.data_space = {}
+        self.unique =  self.DataFram.loc[:,0].unique()
+        target = self.DataFram.loc[:,0].values
+        data = self.DataFram.loc[:,1:].apply(lambda x: (x - np.min(x)) / (np.max(x) - np.min(x))).values
 
         if self.x_newW == None:
             n, self.x_w = data.shape
@@ -53,8 +54,10 @@ class DHA():
         self.y_train = self.y_train[sort_index]
 
         self.split_num = []
-        for class_i in self.unique:
-            self.split_num.append(len(self.y_train[self.y_train==class_i]))
+        for index,class_i in enumerate(self.unique):
+            self.split_num.append(len(self.y_train[self.y_train == class_i]))
+            self.data_space['data{}'.format(index)] = self.x_train[self.y_train==class_i]
+
 
     # -------------------距离计算区----------------
     #测试数据集 在空间W中到球心的距离
@@ -135,15 +138,17 @@ class DHA():
         return penalty
     #产生模型
     def gen_model(self):
-        names = locals()
+        names = {}
         with tf.name_scope('Space'):
             with tf.name_scope('InitVariable'):
                 #动态变量名设置
-                with tf.name_scope('V'):
-                    V = tf.placeholder(tf.float32, shape=[None, self.x_w], name='Input')
+                for i in range(len(self.split_num)):
+                    with tf.name_scope('V{}'.format(i)):
+                        names['V{}'.format(i)] = tf.placeholder(tf.float32, shape=[None, self.x_w], name='Input{}'.format(i))
                 with tf.name_scope('TrainingStep'):
                     training_step = tf.Variable(0, name='TrainStep', trainable=False)
                     learning_rate = tf.Variable(self.lr, name='TrainStep', trainable=False)
+
                 with tf.name_scope('weight'):
                     weight = tf.Variable(tf.random_normal([self.x_w, self.x_newW]), name='W', trainable=True)
 
@@ -155,12 +160,8 @@ class DHA():
                         names['R{}'.format(i)] = tf.Variable(initial_value=self.R_constant, dtype=tf.float32, name='R{}'.format(i), trainable=True)
 
             with tf.name_scope('layer'):
-                U = tf.matmul(V, weight) + bias
                 for i in range(len(self.split_num)):
-                    names['U{}'.format(i)] = i
-                # U1,U2,U3 = tf.split(U, self.split_num, 0)
-                for index,i in  enumerate(tf.split(U, self.split_num, 0)):
-                    names['U{}'.format(index)] = i
+                    names['U{}'.format(i)] = tf.matmul(names['V{}'.format(i)], weight) + bias
 
             with tf.name_scope('circle'):
                 for i in range(len(self.split_num)):
@@ -203,7 +204,7 @@ class DHA():
                         loss_R2Cm = loss_R2Cm + tf.where(tf.greater(Cm_normal, 0), Cm_normal, 0)
 
             with tf.name_scope('loss_class'):
-                loss_class = 0
+                loss_class = 0.0
                 for i in range(len(self.split_num)):
                     loss_class = loss_class + tf.linalg.norm(names['U{}'.format(i)] - names['Cm{}'.format(i)])
 
@@ -211,8 +212,8 @@ class DHA():
                 loss_all = self.P * (loss_pow) + self.P_R2Cm * loss_R2Cm + self.P_class * loss_class
 
             with tf.name_scope('Optimizer'):
-                # learning_rate = tf.train.exponential_decay(learning_rate, training_step, decay_steps=100,
-                #                                            decay_rate=0.8, staircase=True)
+                learning_rate = tf.train.exponential_decay(learning_rate, training_step, decay_steps=100,
+                                                           decay_rate=0.8)
                 train_op = tf.train.AdamOptimizer(learning_rate).minimize(loss_all)
 
             init_op = tf.global_variables_initializer()
@@ -223,16 +224,25 @@ class DHA():
                 # writer.close()
                 self.loss_list = []
                 self.R_history = []
-
+                num = len(self.split_num)
                 print('Enter train the Space........')
                 t1_ = time.time()
                 for j in range(self.train_step):
-
-                    _ = sess.run(train_op, feed_dict={V: self.x_train})
-                    loss = sess.run(loss_all, feed_dict={V: self.x_train})
-
+                    for batch_i in range(int(np.ceil(len(self.x_train)/self.batch_size*num))):
+                    # for i in range(num):
+                        # self.data_space['train_data{}'.format(i)] = random.choices(self.data_space['data{}'.format(i)],
+                        #                                                                 k = self.batch_size
+                        #                                                                 )
+                        feed_dicts = {}
+                        for i in range(len(self.split_num)):
+                            feed_dicts[names['V{}'.format(i)]] = random.choices(self.data_space['data{}'.format(i)],
+                                                                                        k = self.batch_size
+                                                                                        )
+                        _ = sess.run(train_op, feed_dict=feed_dicts)
+                        loss = sess.run(loss_all, feed_dict=feed_dicts)
+                    # self.circle = sess.run([names['Cm{}'.format(i)] for i in range(num)], feed_dict=feed_dicts)
                     self.loss_list.append(loss)
-                    num = len(self.split_num)
+
                     R = sess.run([names['R{}'.format(i)] for i in range(num)])
                     self.R_history.append(R)
                 t2_ = time.time()
@@ -244,13 +254,17 @@ class DHA():
                 f.close()
                 self.weight_ = sess.run(weight)
                 self.bias_ = sess.run(bias)
-                self.circle,self.R_list,Cmpre_test = [],[],[]
+                self.R_list,Cmpre_test = [],[]
+                self.circle = []
+
+                feed_dicts = {}
                 for i in range(len(self.split_num)):
-                    circle_ = sess.run(names['Cm{}'.format(i)], feed_dict={V: self.x_train})
-                    R_ = sess.run(names['R{}'.format(i)])
-                    self.circle.append(circle_)
-                    self.R_list.append(R_)
-                    Cmpre = self.Cm_test_distance(self.x_test, circle_, self.weight_, self.bias_, R_)
+                    feed_dicts[names['V{}'.format(i)]] = self.data_space['data{}'.format(i)]
+                self.circle = sess.run([names['Cm{}'.format(i)] for i in range(num)], feed_dict=feed_dicts)
+                self.R_list = sess.run([names['R{}'.format(i)] for i in range(num)])
+
+                for i in range(len(self.split_num)):
+                    Cmpre = self.Cm_test_distance(self.x_test, self.circle[i], self.weight_, self.bias_, self.R_list[i])
                     # gaus_Cmpre_one = Gaussian_PDF(weight_, bias_, datatrain[:Nm1, :], datatest)
                     Cmpre_test.append(Cmpre)
                 acc = self.Acc(Cmpre_test, self.y_test)
@@ -259,18 +273,10 @@ class DHA():
 
 if __name__ == "__main__":
     import time
-    DataPath = r'Wine.csv'
+    DataPath = r'.\Wine.csv'
     DataSet = pd.read_csv(DataPath,header=None)
-    Label = DataSet.loc[:, 0]
-    DataSet = DataSet.loc[:,1:]
 
-    DHA_classifier = DHA(DataSet,Label,
-                         train_step=5000,
-                         lr=0.001,
-                         R_constant=1.0,
-                         P=1.0,
-                         P_R2Cm=0.5,
-                         P_class=0.0001)
+    DHA_classifier = DHA(DataSet,train_step=40,batch_size=20,lr=0.001)
     t1 = time.time()
     DHA_classifier.gen_model()
     t2 = time.time()
