@@ -8,3 +8,9 @@
 
 # 图
 论文中手写体形成的特征空间在[这里](https://github.com/crazy3water/MNIST_pic_45/tree/master)
+
+# 第一次版本更新
+引入了tf.split，将算法重构为类，并重写了作图机制
+
+# 第二次版本更新
+增加了 batch_size，增加了算法稳定性和速度，减少了设备压力
